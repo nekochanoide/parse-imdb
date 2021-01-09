@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup, NavigableString
 import json
 import webbrowser
 import multiprocessing as mp
+from multiprocessing import Value, Array
 import sys
 
 # import f
@@ -184,9 +185,9 @@ def main(**kwargs):
     hello :)
     """
 
+
     print(kwargs)
     links = obtain_all_links(**kwargs)
-
 
 # In[33]:
 
