@@ -1,4 +1,5 @@
 import json
+from log import append_new_line
 from tkinter import *
 from tkinter.ttk import Progressbar
 from title_types import title_types
@@ -6,9 +7,7 @@ from countries import countries
 from genres import genres
 from tkcalendar import Calendar
 from range_slider import Range_slider
-import asyncio
 import threading
-import queue
 from multiprocessing import Manager, Value, Pool
 import multiprocessing as mp
 
@@ -77,13 +76,16 @@ def parse_and_count(link):
     imdb_titles.curr.value = imdb_titles.curr.value + 1
     imdb_titles.progress["percent"] = imdb_titles.curr.value / \
         imdb_titles.total.value
-    imdb_titles.progress["name"] = f'Парсинг тайтлов: {"{:5.1f}".format(imdb_titles.progress["percent"] * 100)} %'
+    imdb_titles.progress["name"] = f'Парсинг тайтлов: {"{:.1f}".format(imdb_titles.progress["percent"] * 100)} %'
     return val
 
 
 def work(**kwargs):
     print(kwargs)
+    append_new_line("log.log", "Start with parameters:")
+    append_new_line("log.log", str(kwargs))
     progress["name"] = "Получаю ссылки на все тайтлы..."
+    append_new_line("log.log", "Obtaining titles links")
     progress["counting"] = False
 
     try:
@@ -91,10 +93,12 @@ def work(**kwargs):
     except:
         progress["exception"] = True
         progress["name"] = "ОШИБКА: не удалось получить ссылки на тайтлы"
+        append_new_line("log.log", "Error: can not obtain titles links")
         progress["idle"] = True
         return
 
     progress["name"] = "Парсинг тайтлов..."
+    append_new_line("log.log", f"Titles parsing, count: {len(links)}")
     progress["counting"] = True
     progress["percent"] = 0
     total.value = len(links)
@@ -111,10 +115,12 @@ def work(**kwargs):
     except:
         progress["exception"] = True
         progress["name"] = "ОШИБКА: парсинг неудался :("
+        append_new_line("log.log", "Error: failed to parse")
         progress["idle"] = True
         return
 
     progress["name"] = "Запись результатов в titles.json"
+    append_new_line("log.log", "Writing titles.json")
     progress["counting"] = False
 
     with open("titles.json", "w", encoding="utf-8") as outfile:
@@ -123,6 +129,7 @@ def work(**kwargs):
         except:
             progress["exception"] = True
             progress["name"] = "ОШИБКА: неудалось сохранить данные"
+            append_new_line("log.log", "Error: can not save data")
 
     progress["idle"] = True
 
@@ -137,6 +144,7 @@ def start_download():
         params = None
         progress["exception"] = True
         progress["name"] = "ОШИБКА: оно даже не запустилось :("
+        append_new_line("log.log", "Error: can not launch")
 
     if params:
         worker_thread = threading.Thread(target=lambda: work(**params))
@@ -209,9 +217,9 @@ if __name__ == "__main__":
     progress["exception"] = False
 
     def update_progress():
-        print(progress["name"])
-        print(progress["percent"])
-        print(progress["counting"])
+        # print(progress["name"])
+        # print(progress["percent"])
+        # print(progress["counting"])
         progress_label["text"] = progress["name"]
         parse_button["state"] = "normal" if progress["idle"] else "disabled"
         if progress["idle"] and not progress["exception"]:
@@ -226,4 +234,14 @@ if __name__ == "__main__":
         root.after(1000, update_progress)
 
     root.after(1000, update_progress)
+    append_new_line(
+        "log.log", "=================================================")
+    append_new_line("log.log", "Start program")
+
+    def on_closing():
+        append_new_line("log.log", "End program")
+        append_new_line(
+            "log.log", "=================================================")
+        root.destroy()
+    root.protocol("WM_DELETE_WINDOW", on_closing)
     root.mainloop()
