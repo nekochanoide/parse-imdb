@@ -49,18 +49,6 @@ def new_scrollable_listbox(host, x, label):
     return listbox, frame
 
 
-def count():
-    global progressbar
-    a = 0
-    max = 1000000000
-    for i in range(max):
-        a += i
-        if (i % 1000000 == 0):
-            progressbar["value"] = i / max
-    progressbar["value"] = 1
-    print(a)
-
-
 def get_list_box_select(listbox):
     reslist = []
     for i in listbox.curselection():
@@ -83,27 +71,34 @@ def collect_user_params():
                            for key in get_list_box_select(countries_listbox)]
     return params
 
-# Run the asyncio event loop in a worker thread.
 
 def parse_and_count(link):
     val = imdb_titles.parse_title_page(link)
     imdb_titles.curr.value = imdb_titles.curr.value + 1
     imdb_titles.progress["percent"] = imdb_titles.curr.value / \
         imdb_titles.total.value
+    imdb_titles.progress["name"] = f'Парсинг тайтлов: {"{:5.1f}".format(imdb_titles.progress["percent"] * 100)} %'
     return val
 
 
 def work(**kwargs):
     print(kwargs)
-    progress["name"] = "obtaining links"
-    progress["percent"] = .5
-    links = imdb_titles.obtain_all_links(**kwargs)
+    progress["name"] = "Получаю ссылки на все тайтлы..."
+    progress["counting"] = False
 
-# In[33]:
+    try:
+        links = imdb_titles.obtain_all_links(**kwargs)
+    except:
+        progress["exception"] = True
+        progress["name"] = "ОШИБКА: не удалось получить ссылки на тайтлы"
+        progress["idle"] = True
+        return
 
-    progress["name"] = "parsing titles"
-
+    progress["name"] = "Парсинг тайтлов..."
+    progress["counting"] = True
+    progress["percent"] = 0
     total.value = len(links)
+    curr.value = 0
 
     pool = Pool(mp.cpu_count(), initializer=initProcess,
                 initargs=(progress, total, curr))
@@ -111,32 +106,42 @@ def work(**kwargs):
 
     pool.close()
     pool.join()
-    titles = res.get()
+    try:
+        titles = res.get()
+    except:
+        progress["exception"] = True
+        progress["name"] = "ОШИБКА: парсинг неудался :("
+        progress["idle"] = True
+        return
 
-
-# In[34]:
-
-    progress["name"] = "writing file"
-    progress["percent"] = .5
+    progress["name"] = "Запись результатов в titles.json"
+    progress["counting"] = False
 
     with open("titles.json", "w", encoding="utf-8") as outfile:
         try:
             json.dump(titles, outfile, ensure_ascii=False)
-        except Exception:
-            try:
-                return titles
-            except:
-                return 1
+        except:
+            progress["exception"] = True
+            progress["name"] = "ОШИБКА: неудалось сохранить данные"
 
-    return 0
+    progress["idle"] = True
 
 
 def start_download():
-    params = collect_user_params()
-    worker_thread = threading.Thread(target=lambda: work(**params))
-    # worker_thread = threading.Thread(target=lambda: main(progress, **params))
-    worker_thread.setDaemon(True)
-    worker_thread.start()
+    progress["idle"] = False
+    progress["exception"] = False
+    params = None
+    try:
+        params = collect_user_params()
+    except:
+        params = None
+        progress["exception"] = True
+        progress["name"] = "ОШИБКА: оно даже не запустилось :("
+
+    if params:
+        worker_thread = threading.Thread(target=lambda: work(**params))
+        worker_thread.setDaemon(True)
+        worker_thread.start()
 
 
 if __name__ == "__main__":
@@ -145,7 +150,7 @@ if __name__ == "__main__":
     root["bg"] = "#fafafa"
     root.title("Parse imdb")
     root.wm_attributes("-alpha", 0.95)
-    root.geometry("600x800")
+    root.geometry("600x820")
 
     frame = Frame(root)
     frame.pack(padx=10, pady=10)
@@ -181,30 +186,43 @@ if __name__ == "__main__":
         frame, list(countries.keys()), "Countries")
     countries_div.grid(column=0, row=5, columnspan=2)
 
+    parse_button = Button(frame, text="Parse titles",
+                          command=start_download)
+    parse_button.grid(column=0, row=6, columnspan=2)
+
+    progress_label = Label(frame, text="URMOM")
+    progress_label.grid(column=0, row=7, columnspan=2)
+
     progressbar = Progressbar(frame, orient=HORIZONTAL,
                               length=200, mode='determinate', maximum=1)
-    progressbar.grid(column=0, row=7, columnspan=2)
-
-    # def update_progressbar(name, procent):
-    #     progressbar.proc
+    progressbar.grid(column=0, row=8, columnspan=2)
 
     manager = Manager()
     progress = manager.dict()
     total = Value("i", 0)
     curr = Value("i", 0)
 
-    progress["name"] = "idle"
+    progress["name"] = ""
     progress["percent"] = 0
-
-    # parse_button = Button(frame, text="Parse titles", command=start_download)
-    parse_button = Button(frame, text="Parse titles",
-                          command=start_download)
-    parse_button.grid(column=0, row=6, columnspan=2)
+    progress["counting"] = False
+    progress["idle"] = True
+    progress["exception"] = False
 
     def update_progress():
         print(progress["name"])
         print(progress["percent"])
-        progressbar["value"] = progress["percent"]
+        print(progress["counting"])
+        progress_label["text"] = progress["name"]
+        parse_button["state"] = "normal" if progress["idle"] else "disabled"
+        if progress["idle"] and not progress["exception"]:
+            progress["name"] = "Ожидание..."
+        if (progress["counting"]):
+            progressbar["mode"] = "determinate"
+            progressbar["value"] = progress["percent"]
+        else:
+            progressbar["mode"] = "indeterminate"
+            progressbar["value"] += .1
+
         root.after(1000, update_progress)
 
     root.after(1000, update_progress)
